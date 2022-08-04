@@ -1,0 +1,4 @@
+./data/cocoapi/images/train2017/
+./data/cocoapi/images/train2017/*
+./.idea/
+./venv/
