@@ -6,6 +6,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from torchvision.transforms import transforms
+# TODO check alive_bar
 from alive_progress import alive_bar
 
 
@@ -100,12 +101,21 @@ class MyCollate:
 def get_loader(
         img_dir,
         captions_file,
-        transform,
+        transform=None,
         batch_size=32,
         num_workers=8,
         shuffle=True,
         pin_memory=True
 ):
+    if transform is None:
+        transform = transforms.Compose(
+            [
+                transforms.Resize(256),  # smaller edge of image resized to 256
+                transforms.CenterCrop(224),  # get 224x224 crop from center (224 is the ResNet input size
+                transforms.ToTensor(),
+            ]
+        )
+
     dataset = COCODataset(img_dir=img_dir, captions_file=captions_file, transform=transform)
 
     pad_idx = dataset.vocab.stoi["<PAD>"]
@@ -126,15 +136,7 @@ def main():
     img_dir = './data/cocoapi/images/train2017'
     captions_file = './data/anns-50.csv'
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize(256),         # smaller edge of image resized to 256
-            transforms.CenterCrop(224),     # get 224x224 crop from center
-            transforms.ToTensor(),
-        ]
-    )
-
-    dataloader = get_loader(img_dir=img_dir, captions_file=captions_file, transform=transform)
+    dataloader = get_loader(img_dir=img_dir, captions_file=captions_file)
 
     for idx, (img, caption) in enumerate(dataloader):
         print(f'image shape :: ' + str(img.shape))
