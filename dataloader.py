@@ -8,7 +8,9 @@ from PIL import Image
 from torchvision.transforms import transforms
 # TODO check alive_bar
 from alive_progress import alive_bar
+import string
 
+punctuations = set(string.punctuation)
 
 class Vocabulary:
     def __init__(self, freq_threshold):
@@ -33,16 +35,17 @@ class Vocabulary:
         with alive_bar(len(sentence_list)) as bar:
             for sentence in sentence_list:
                 for word in self.tokenizer_eng(sentence):
-                    if word not in frequencies:
-                        frequencies[word] = 1
+                    if word not in punctuations:
+                        if word not in frequencies:
+                            frequencies[word] = 1
 
-                    else:
-                        frequencies[word] += 1
+                        else:
+                            frequencies[word] += 1
 
-                    if frequencies[word] == self.freq_threshold:
-                        self.itos[idx] = word
-                        self.stoi[word] = idx
-                        idx += 1
+                        if frequencies[word] == self.freq_threshold:
+                            self.itos[idx] = word
+                            self.stoi[word] = idx
+                            idx += 1
                 bar()
 
     def numericalize(self, text):
@@ -52,6 +55,10 @@ class Vocabulary:
             self.stoi[token] if token in self.stoi else self.stoi["<UNK>"]
             for token in tokenized_text
         ]
+
+    def ids_to_words(self, indexes):
+        return [self.itos[idx] for idx in indexes]
+
 
 
 class COCODataset(Dataset):

@@ -11,14 +11,14 @@ import requests
 import time
 
 from dataloader import get_loader
-from model import EncoderCNN, DecoderRNN, train
+from model import EncoderCNN, DecoderRNN, train_epoch, val_epoch
 
 
 def main():
     # Set values for the training variables
     batch_size = 32  # batch size
-    embed_size = 256  # dimensionality of image and word embeddings
-    hidden_size = 512  # number of features in hidden state of the RNN decoder
+    embed_size = 10 # 256  # dimensionality of image and word embeddings
+    hidden_size = 15 # 512  # number of features in hidden state of the RNN decoder
     num_epochs = 1  # number of training epochs
     lr = 0.001
 
@@ -28,6 +28,8 @@ def main():
     loader = get_loader(img_dir=img_dir, captions_file=captions_file, batch_size=batch_size)
     # TODO: insert right files for validation
     validation_loader = get_loader(img_dir=img_dir, captions_file=captions_file, batch_size=batch_size)
+
+    print('vocab size:: ', len(loader.dataset.vocab))
 
     # Initialize the encoder and decoder
     encoder = EncoderCNN(embed_size)
@@ -54,20 +56,25 @@ def main():
     num_train_batch = math.ceil(len(loader.dataset) / batch_size)
     num_val_batch = math.ceil(len(loader.dataset) / batch_size)
     print("Number of train batches:", num_train_batch)
-    print("Number of validation steps:", num_val_batch)
+    print("Number of validation batches:", num_val_batch)
 
     losses = []
     for epoch in range(0, num_epochs):
-        train_loss = train(loader, encoder, decoder, lf, optimizer,
+        # Switch to train mode
+        encoder.train()
+        decoder.train()
+        train_loss = train_epoch(loader, encoder, decoder, lf, optimizer,
                            vocab_size=len(loader.dataset.vocab),
                            epoch=epoch,
                            num_train_batch=num_train_batch)
 
-        losses.append(train_loss)
+        print('\n', train_loss)
 
-    print("Losses")
-    print(losses)
+        val_loss, val_bleu_4_score = val_epoch(loader, encoder, decoder, lf,
+                             vocab_size=len(loader.dataset.vocab),
+                             num_val_batch=num_val_batch)
 
+        print('\n', val_loss, '\nBleu_4_val::', val_bleu_4_score)
 
 if __name__ == "__main__":
     main()

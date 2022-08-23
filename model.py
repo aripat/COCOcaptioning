@@ -6,7 +6,7 @@ import torchvision.models as models
 from torch.nn import functional as F
 import numpy as np
 import sys
-
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
 class EncoderCNN(nn.Module):
     def __init__(self, embed_size):
@@ -50,9 +50,7 @@ class DecoderRNN(nn.Module):
 
     def forward(self, features, captions):
         """Decode image feature vectors and generates captions."""
-        captions = captions[:, :-1]
         embeddings = self.embed(captions)
-
 
         # Before the unsqueeze the encoder features have shape == (batch_size, embedding_size).
         # The first decoder input is the features from the encoder:
@@ -60,6 +58,15 @@ class DecoderRNN(nn.Module):
         inputs = torch.cat((features.unsqueeze(1), embeddings), 1)
         hiddens, _ = self.lstm(inputs)
         outputs = self.linear(hiddens)
+
+        for i in range(len(outputs)):
+            predicted_ids = []
+            for scores in outputs[i]:
+                # Find the index of the token that has the max score
+                predicted_ids.append(scores.argmax().item())
+            print('inputs::', captions[i])
+            print('prediction::', predicted_ids)
+
         return outputs
 
     # TODO
@@ -69,13 +76,9 @@ class DecoderRNN(nn.Module):
 
 ## Functions to train and test the encoder - decoder architecture
 
-def train(loader, encoder, decoder, loss_function, optimizer, vocab_size,
+def train_epoch(loader, encoder, decoder, loss_function, optimizer, vocab_size,
           epoch, num_train_batch):
     """Train the model for one epoch using the provided parameters"""
-
-    # Switch to train mode
-    encoder.train()
-    decoder.train()
 
     # Keep track of train loss
     total_loss = 0.0
@@ -108,8 +111,8 @@ def train(loader, encoder, decoder, loss_function, optimizer, vocab_size,
         total_loss += loss.item()
 
         # Get training statistics
-        stats = "Epoch %d, Train step [%d/%d], %ds, Loss: %.4f" \
-                % (epoch, i_step, num_train_batch, time.time() - start_train_time,
+        stats = "Epoch %d, batch [%d/%d], %ds, Loss: %.4f" \
+                % (epoch, i_step+1, num_train_batch, time.time() - start_train_time,
                    loss.item())
 
         # Print training statistics (on same line)
@@ -119,3 +122,63 @@ def train(loader, encoder, decoder, loss_function, optimizer, vocab_size,
         i_step += 1
 
     return total_loss / num_train_batch
+
+
+def val_epoch(loader, encoder, decoder, loss_function, vocab_size, num_val_batch):
+    """Validate the model for one epoch using the provided parameters"""
+
+    # Switch to validation mode
+    encoder.eval()
+    decoder.eval()
+
+    # Initialize smoothing function
+    smoothing = SmoothingFunction()
+
+    # Keep track of validation loss
+    total_loss = 0.0
+    total_bleu_4 = 0.0
+
+    for batch in loader:
+        # Obtain the batch
+        if torch.cuda.is_available():
+            images, captions = batch[0].cuda(), batch[1].cuda()
+        else:
+            images, captions = batch[0], batch[1]
+
+        # Pass the inputs through the CNN-RNN model
+        features = encoder(images)
+        outputs = decoder(features, captions)
+
+        # Calculate loss
+        loss = loss_function(outputs.view(-1, vocab_size), captions.view(-1))
+        total_loss += loss.item()
+        total_bleu_4 += bleu_score(outputs, captions, loader.dataset.vocab, smoothing)
+
+    return total_loss / num_val_batch, total_bleu_4 / num_val_batch
+
+
+def bleu_score(outputs, captions, vocab, smoothing):
+    # Calculate the total Bleu-4 score for the batch
+    batch_bleu_4 = 0.0
+
+    # Iterate over outputs. Note: outputs[i] is a caption in the batch
+    # outputs[i, j, k] contains the model's predicted score i.e. how
+    # likely the j-th token in the i-th caption in the batch is the
+    # k-th token in the vocabulary.
+    for i in range(len(outputs)):
+        predicted_ids = []
+        for scores in outputs[i]:
+            # Find the index of the token that has the max score
+            predicted_ids.append(scores.argmax().item())
+        # Convert word ids to actual words
+        predicted_word_list = vocab.ids_to_words(predicted_ids)
+        caption_word_list = vocab.ids_to_words(captions[i].numpy())
+
+        # Calculate Bleu-4 score and append it to the batch_bleu_4 list
+        batch_bleu_4 += sentence_bleu([caption_word_list],
+                                      predicted_word_list,
+                                      smoothing_function=smoothing.method1)
+
+    print('predicted_word_list:: ', predicted_word_list)
+    print('caption_word_list:: ', caption_word_list)
+    return batch_bleu_4 / len(outputs)

@@ -39,7 +39,7 @@ annIds = coco_caps.getAnnIds(imgIds=img_ids)
 anns = coco_caps.loadAnns(annIds)
 coco_caps.showAnns(anns)
 
-#if not os.path.exists('./data/anns-50.csv'):
+# if not os.path.exists('./data/anns-50.csv'):
 data = pd.DataFrame(anns).set_index('image_id')
 img_df = pd.DataFrame(img).set_index('img_id')
 data = data.join(img_df)
